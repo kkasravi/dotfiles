@@ -1,0 +1,333 @@
+giturl() {
+  if [ "$#" == "0" ]; then
+    echo "usage: giturl [-h|--help] https|git"
+    return  0
+  fi
+  case "$#" in
+    1)
+      case "$1" in
+        https)
+          git config --global --remove-section url."git@github.com:"
+          git config --global url."https://github.com/".insteadOf git@github.com:
+          ;;
+        git)
+          git config --global --remove-section url."https://github.com/"
+          git config --global url."git@github.com:".insteadOf "https://github.com/"
+          ;;
+        *)
+          echo "unknown argument $2"
+          echo "usage: gitsha [-s|--short] repo"
+          return 0
+          ;;
+      esac
+      ;;
+    *)
+      echo "too many arguments $@"
+      return 0
+  esac
+}
+
+gitsha() {
+  local sha
+  if [ "$#" == "0" ]; then
+    echo "usage: gitsha [-s|--short] repo"
+    return  0
+  fi
+  case "$#" in 
+    1)
+      sha=$(git ls-remote -q git@github.com:NervanaSystems/${1}.git --refs refs/heads/master|awk '{print $1}')
+      echo $sha
+      ;;
+    2)
+      case "$1" in
+        -s | --short)
+          sha=$(git ls-remote -q git@github.com:NervanaSystems/${2}.git --refs refs/heads/master|awk '{print $1}')
+          echo ${sha:0:7}
+          ;;
+        *) 
+          echo "unknown argument $2"
+          echo "usage: gitsha [-s|--short] repo"
+          return 0
+          ;;
+      esac
+      ;;
+    *)
+      shift 2
+      echo "too many arguments $@"
+      return 0
+  esac
+}
+
+gitci () (
+  local verbose=false force='' origin=origin usage='gitci [-V -F -o<remote_repo[=origin]>] [file|"message"]'
+
+  gcommit ()
+  {
+    local cmd file_or_message="$1" option
+    if [ -f "$file_or_message" ]; then
+      option="-F"
+    else
+      option="-m"
+    fi
+    cmd='git commit -a $option "$file_or_message"' 
+    ( $verbose && echo $cmd && eval $cmd  ) || eval $cmd
+  }
+  
+  gpush ()
+  {
+    local branch=$(git branch | grep '^*' | awk '{print $2}') cmd 
+    cmd="git push $origin $branch $force" 
+    ( $verbose && echo $cmd && eval $cmd  ) || eval $cmd
+  }
+
+  while :
+  do
+    case "$1" in
+      -h | --help)
+        echo $usage
+        return
+    	  ;;
+      -V | --verbose)
+        verbose=true
+        shift
+        ;;
+      -F | --force)
+        force=" --force"
+        shift
+        ;;
+      -o | -o*)
+        case "$1" in 
+          -o)
+            origin=$2
+            shift 2
+            ;;
+          -o*)
+            origin=${1#-o}
+            shift 1
+            ;;
+        esac
+        ;;
+      -f | -f*)
+        case "$1" in 
+          -f)
+            file=$2
+            shift 2
+            ;;
+          -f*)
+            file=${1#-f}
+            shift 1
+            ;;
+        esac
+        ;;
+      *)
+        break;
+        ;;
+    esac
+  done
+  if [ "$#" == 0 ]; then
+    echo $usage
+  else 
+    gcommit "$@"
+    gpush "$@"
+  fi
+)
+
+gitrm () (
+  local verbose=false branch remote usage='usage: gitrm [-V] [<remote>] [<branch>]'
+
+  while :
+  do
+    case "$1" in
+      -h | --help)
+        echo $usage
+        return
+    	  ;;
+      -V | --verbose)
+        verbose=true
+        shift
+        ;;
+      *)
+        break;
+        ;;
+    esac
+  done
+
+  case "$#" in 
+    0)
+      branch=$(git branch|grep '^*'|awk '{print $2}')
+      ;;
+    1)
+      remote=origin
+      branch=$1
+      shift 1
+      ;;
+    2)
+      remote=$1
+      branch=$2
+      shift 2
+      ;;
+    *)
+      echo "unknown argument $@"
+      exit 1
+      ;;
+  esac
+
+  if [[ -n $branch ]]; then
+    if [[ -z $remote ]]; then
+      cmd="git branch -D $branch"
+      ( $verbose && echo $cmd && eval $cmd  ) || eval $cmd
+    else 
+      cmd="git push $remote --delete $branch"
+      ( $verbose && echo $cmd && eval $cmd  ) || eval $cmd
+      cmd="git branch -D $branch"
+      ( $verbose && echo $cmd && eval $cmd  ) || eval $cmd
+    fi
+  fi
+)
+
+gitco () (
+  local verbose=false force=false merge=false remote=origin pullid="" branch cmd
+  local usage='usage: gitco [-V] [-p[ ]pullid [-m|--merge] [-F|--force] <remote>=origin] [-t[ ]tag] [<branch>]'
+
+  while :
+  do
+    case "$1" in
+      -h | --help)
+        echo $usage
+        return
+    	  ;;
+      -V | --verbose)
+        verbose=true
+        shift
+        ;;
+      -F | --force)
+        force=true
+        shift
+        ;;
+      -p | -p*)
+        case "$1" in 
+          -p)
+            pullid=$2
+            shift 2
+            ;;
+          -p*)
+            pullid=${1#-p}
+            shift 1
+            ;;
+        esac
+        ;;
+      -m | --merge)
+        merge=true
+        shift
+        ;;
+      -t | -t*)
+        case "$1" in 
+          -t)
+            tag=$2
+            shift 2
+            ;;
+          -t*)
+            tag=${1#-t}
+            shift 1
+            ;;
+        esac
+        if [[ $# == 2 ]]; then
+          echo "remote argument $1 is not required, branch is optional"
+          echo ""
+  	  echo $usage
+          return
+        fi
+        ;;
+      *)
+        break;
+        ;;
+    esac
+  done
+  case "$#" in 
+    0)
+      if [[ $merge != true ]]; then
+        if [[ $force == true ]]; then
+          branch=$(git branch | grep '^\*' | awk '{print $2}')
+        else
+          echo $usage
+          return
+        fi
+      fi
+      ;;
+    1)
+      branch=$1
+      shift 1
+      ;;
+    2)
+      remote=$1
+      branch=$2
+      shift 2
+      ;;
+    *)
+      echo "unknown argument $@"
+      exit 1
+      ;;
+  esac
+  if [[ -n $pullid ]]; then
+    if [[ $force == true ]]; then
+      cmd="git checkout master && git branch -D $branch"
+      ( $verbose && echo $cmd && eval $cmd  ) || eval $cmd
+    fi
+    if [[ $merge == true ]]; then
+      cmd="git pull $remote pull/${pullid}/head"
+      ( $verbose && echo $cmd && eval $cmd  ) || eval $cmd
+    else
+      gittype=$(git remote -v | grep origin.*fetch|sed 's/^.*git@\([a-z]*\).*$/\1/')
+      case "$gittype" in
+        github)
+          git config --get remote.${remote}.fetch | grep "refs/remotes/${remote}/pr" 2>&1 >/dev/null
+          if (( $? == 1 )); then
+            cmd="git config --add remote.${remote}.fetch ""'""+refs/pull/*/head:refs/remotes/${remote}/pr/*""'"
+            ( $verbose && echo $cmd && eval $cmd  ) || eval $cmd
+          fi
+          cmd="git fetch $remote pull/${pullid}/head"
+          ( $verbose && echo $cmd && eval $cmd  ) || eval $cmd
+          cmd="git checkout -b $branch $remote/pr/$pullid"
+          ( $verbose && echo $cmd && eval $cmd  ) || eval $cmd
+          ;;
+        gitlab)
+          git config --get remote.${remote}.fetch | grep "refs/remotes/${remote}/pr" 2>&1 >/dev/null
+          if (( $? == 1 )); then
+            cmd="git config --add remote.${remote}.fetch ""'""+refs/merge-requests/*/head:refs/remotes/${remote}/pr/*""'"
+            ( $verbose && echo $cmd && eval $cmd  ) || eval $cmd
+          fi
+          cmd="git fetch $remote merge-requests/${pullid}/head"
+          ( $verbose && echo $cmd && eval $cmd  ) || eval $cmd
+          cmd="git checkout -b $branch $remote/pr/$pullid"
+          ( $verbose && echo $cmd && eval $cmd  ) || eval $cmd
+          ;;
+        *)
+          echo 'unknown git repo '$gittype
+          ;;
+      esac
+    fi
+  elif [[ -n $tag ]]; then 
+    cmd="git fetch $remote --tags"
+    ( $verbose && echo $cmd && eval $cmd  ) || eval $cmd
+    if [[ -n $branch ]]; then
+      cmd="git checkout $tag -b $branch"
+      ( $verbose && echo $cmd && eval $cmd  ) || eval $cmd
+    else
+      cmd="git checkout $tag -b $tag"
+      ( $verbose && echo $cmd && eval $cmd  ) || eval $cmd
+    fi
+  else 
+    if [[ $force == true && -n $branch ]]; then
+      cmd="git checkout -q master && "
+      cmd+="git fetch -q $remote $branch 2>/dev/null && echo fetching $remote $branch && "
+      cmd+="git branch -q -D $branch && echo deleting $branch && "
+      cmd+="git checkout -q -b $branch origin/$branch && echo recreating $branch"
+      ( $verbose && echo $cmd && eval $cmd  ) || eval $cmd
+    else
+      cmd="git fetch $remote master"
+      ( $verbose && echo $cmd && eval $cmd  ) || eval $cmd
+      cmd="git checkout -b $branch ${remote}/master"
+      ( $verbose && echo $cmd && eval $cmd  ) || eval $cmd
+    fi
+  fi
+)
