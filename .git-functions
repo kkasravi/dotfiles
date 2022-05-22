@@ -1,3 +1,22 @@
+gitcreaterepo() {
+  local dir
+  if (( $# == 0 )); then
+    echo "usage: gitcreaterepo [-h|--help] [directory]"
+    return  0
+  fi
+  dir=$1
+  gh repo create $dir --private
+  mkdir -p $dir  && \
+  cd $dir && \
+  echo "# $dir" >> README.md && \
+  git init && \
+  git add README.md && \
+  git commit -m "initial commit"  && \
+  git branch -M main && \
+  git remote add origin git@github.com:kkasravi/${dir}.git && \
+  git push -u origin main
+}
+
 giturl() {
   if [ "$#" == "0" ]; then
     echo "usage: giturl [-h|--help] https|git"
