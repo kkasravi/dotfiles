@@ -17,9 +17,6 @@ create_symlinks() {
 }
 
 create_symlinks
-
 source <(~/.git-functions)
-
-echo "Initializing conda for bash."
 conda init bash
 set -o vi
