@@ -17,6 +17,9 @@ create_symlinks() {
 }
 
 create_symlinks
+echo ~/.git-functions
 source <(~/.git-functions)
+echo conda init bash
 conda init bash
+echo set -o vi
 set -o vi
